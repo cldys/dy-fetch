@@ -16,15 +16,53 @@ from playwright.async_api import async_playwright
 
 # ── URL 解析 ──────────────────────────────────────────────────────────────────
 
-def normalize_url(url: str) -> str:
-    """支持 /video/<id>、/jingxuan?modal_id=<id> 等格式。"""
+def _clean_input(text: str) -> str:
+    """清洗用户粘贴的内容：提取第一个有效 URL，去掉分享文案后缀。"""
+    text = text.strip()
+    # 匹配 douyin.com 短链或标准链接，容忍部分尾部噪音
+    m = re.search(r"https?://(?:v\.douyin\.com|www\.douyin\.com)/[^\s:]*", text)
+    if m:
+        return m.group(0).rstrip("/")
+    # 回退：尝试直接取第一段
+    for token in text.split():
+        if token.startswith("http"):
+            return token
+    return text
+
+
+def _follow_redirect(url: str, timeout: int = 10) -> str:
+    """跟随 v.douyin.com 短链重定向，获取真实视频 URL。"""
+    try:
+        r = requests.head(url, allow_redirects=True, timeout=timeout,
+                          headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"})
+        return r.url
+    except Exception:
+        return url  # fall back to original
+
+
+def normalize_url(raw: str) -> str:
+    """
+    支持多种抖音链接格式，统一转为标准 https://www.douyin.com/video/<id> 形式。
+
+    支持：
+      - /video/<id>
+      - /jingxuan?modal_id=<id>
+      - v.douyin.com/<short> 短链接（跟随重定向）
+      - 粘贴文本中自动提取 URL
+    """
+    url = _clean_input(raw)
+
+    # v.douyin.com 短链接 → 跟随重定向获取真实 URL
+    if "v.douyin.com" in url:
+        url = _follow_redirect(url)
+
     m = re.search(r"/video/(\d+)", url)
     if m:
         return f"https://www.douyin.com/video/{m.group(1)}"
     m = re.search(r"modal_id=(\d+)", url)
     if m:
         return f"https://www.douyin.com/video/{m.group(1)}"
-    raise ValueError(f"无法从 URL 提取视频 ID: {url}")
+    raise ValueError(f"无法从 URL 提取视频 ID: {raw}")
 
 
 def safe_name(text: str, max_len: int = 60) -> str:
