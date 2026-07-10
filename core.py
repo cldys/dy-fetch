@@ -271,7 +271,9 @@ async def download_all(
         else:
             result["files"][label] = {"path": None, "size": 0, "error": "下载失败"}
 
-    result["success"] = bool(result["files"].get("视频") or result["files"].get("音频"))
+    result["success"] = any(
+        f.get("path") for f in result["files"].values()
+    ) if result["files"] else True  # True if at least one download succeeded, or no downloads requested
     if progress_callback:
         progress_callback("done", f"完成！{folder}")
     return result

@@ -103,9 +103,9 @@ class TaskResponse(BaseModel):
     id: str
     url: str
     status: str
-    progress: str
+    progress: Optional[str] = None
     error: Optional[str] = None
-    files: dict = {}
+    files: dict[str, dict] = {}
 
 
 # ── 首页 ──────────────────────────────────────────────────────────────────────
