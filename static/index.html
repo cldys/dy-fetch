@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>抖音下载器</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e1e4ed;
+    --muted: #8b8fa3;
+    --accent: #fe2c55;
+    --accent-hover: #ff4d6a;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* header */
+  .header {
+    text-align: center;
+    padding: 32px 0 8px;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #fe2c55, #ff6b81);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header p {
+    color: var(--muted);
+    margin-top: 6px;
+    font-size: 14px;
+  }
+
+  /* card */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  /* input */
+  .input-group {
+    display: flex;
+    gap: 10px;
+  }
+  .input-group input {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .input-group input:focus {
+    border-color: var(--accent);
+  }
+  .input-group input::placeholder {
+    color: var(--muted);
+  }
+
+  /* buttons */
+  .btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+  .btn-sm {
+    padding: 6px 14px;
+    font-size: 13px;
+    background: var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-sm:hover { background: #3a3d4a; }
+
+  /* checkboxes */
+  .options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 14px;
+  }
+  .options label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .options input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 16px; height: 16px;
+  }
+
+  /* task list */
+  .task {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+  .task:last-child { border-bottom: none; }
+
+  .task-info { flex: 1; min-width: 0; }
+  .task-url {
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .task-progress {
+    font-size: 13px;
+    margin-top: 3px;
+  }
+
+  /* status badges */
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-queued { background: #334155; color: #94a3b8; }
+  .badge-fetching { background: #1e3a5f; color: #60a5fa; }
+  .badge-downloading { background: #5c3d0e; color: #fbbf24; }
+  .badge-done { background: #14532d; color: #4ade80; }
+  .badge-error { background: #450a0a; color: #f87171; }
+
+  .task-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 0;
+    font-size: 14px;
+  }
+
+  /* spinner */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  .footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 10px 0 30px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- header -->
+  <div class="header">
+    <h1>🎵 抖音下载器</h1>
+    <p>粘贴视频链接，无水印下载视频、音频、封面</p>
+  </div>
+
+  <!-- input card -->
+  <div class="card">
+    <div class="card-title">📥 新建下载</div>
+    <div class="input-group">
+      <input id="urlInput" type="text"
+             placeholder="粘贴抖音视频链接，例如 https://www.douyin.com/video/..."
+             autocomplete="off" />
+      <button class="btn btn-primary" id="submitBtn" onclick="submitDownload()">开始下载</button>
+    </div>
+    <div class="options">
+      <label><input type="checkbox" id="optVideo" checked /> 视频</label>
+      <label><input type="checkbox" id="optAudio" checked /> 音频</label>
+      <label><input type="checkbox" id="optCover" checked /> 封面</label>
+      <label><input type="checkbox" id="optJson" /> API 数据 (JSON)</label>
+    </div>
+  </div>
+
+  <!-- task list -->
+  <div class="card">
+    <div class="card-title">📋 下载任务</div>
+    <div id="taskList">
+      <div class="empty">还没有下载任务，在上方粘贴链接开始</div>
+    </div>
+  </div>
+
+  <div class="footer">支持 /video/ID 和 /jingxuan?modal_id=ID 格式</div>
+
+</div>
+
+<!-- 隐藏的文件上传 form -->
+<form id="downloadForm" style="display:none">
+  <input type="hidden" name="task_id" />
+  <input type="hidden" name="filename" />
+</form>
+
+<script>
+  const tasks = {};
+  let pollTimer = null;
+
+  function statusBadge(s) {
+    const map = {
+      queued: 'badge-queued', fetching: 'badge-fetching',
+      downloading: 'badge-downloading', done: 'badge-done', error: 'badge-error'
+    };
+    const names = {
+      queued: '排队中', fetching: '获取中', downloading: '下载中',
+      done: '已完成', error: '失败'
+    };
+    return `<span class="badge ${map[s] || 'badge-queued'}">${names[s] || s}</span>`;
+  }
+
+  function renderTasks() {
+    const el = document.getElementById('taskList');
+    const items = Object.values(tasks).sort((a, b) => b._ts - a._ts);
+    if (!items.length) {
+      el.innerHTML = '<div class="empty">还没有下载任务，在上方粘贴链接开始</div>';
+      return;
+    }
+    el.innerHTML = items.map(t => {
+      let actions = '';
+      if (t.status === 'done' && t.files) {
+        for (const [label, f] of Object.entries(t.files)) {
+          if (f.path) {
+            const filename = f.path.split('/').pop();
+            actions += `<a class="btn-sm" href="/api/file/${t.id}/${filename}" download>⬇ ${label}</a>`;
+          }
+        }
+      }
+      let progressHtml = t.progress;
+      if (t.status === 'fetching') {
+        progressHtml = `<span class="spinner"></span>${t.progress}`;
+      }
+      return `<div class="task">
+        <div class="task-info">
+          <div class="task-url">${escHtml(t.url)}</div>
+          <div class="task-progress">${progressHtml}</div>
+        </div>
+        ${statusBadge(t.status)}
+        <div class="task-actions">${actions}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  async function submitDownload() {
+    const input = document.getElementById('urlInput');
+    const url = input.value.trim();
+    if (!url) return alert('请输入抖音视频链接');
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = '提交中...';
+
+    try {
+      const res = await fetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: url,
+          video: document.getElementById('optVideo').checked,
+          audio: document.getElementById('optAudio').checked,
+          cover: document.getElementById('optCover').checked,
+          save_json: document.getElementById('optJson').checked,
+        })
+      });
+      const data = await res.json();
+      tasks[data.id] = { ...data, _ts: Date.now() };
+      input.value = '';
+      renderTasks();
+      startPolling();
+    } catch (e) {
+      alert('请求失败: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '开始下载';
+    }
+  }
+
+  async function pollTasks() {
+    const active = Object.values(tasks).filter(t => t.status !== 'done' && t.status !== 'error');
+    if (!active.length) { stopPolling(); return; }
+
+    for (const t of active) {
+      try {
+        const res = await fetch(`/api/task/${t.id}`);
+        const data = await res.json();
+        tasks[t.id] = { ...data, _ts: tasks[t.id]?._ts || Date.now() };
+      } catch(e) { /* ignore */ }
+    }
+    renderTasks();
+
+    // check again
+    const stillActive = Object.values(tasks).filter(t => t.status !== 'done' && t.status !== 'error');
+    if (!stillActive.length) stopPolling();
+  }
+
+  function startPolling() {
+    if (!pollTimer) pollTimer = setInterval(pollTasks, 1500);
+  }
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  // enter to submit
+  document.getElementById('urlInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitDownload();
+  });
+
+  // focus on load
+  document.getElementById('urlInput').focus();
+  renderTasks();
+</script>
+</body>
+</html>

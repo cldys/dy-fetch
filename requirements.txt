@@ -1,0 +1,9 @@
+# Douyin Downloader - Dependencies
+# Install: pip install -r requirements.txt
+# Browser:  playwright install chromium
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+playwright>=1.48.0
+requests>=2.32.0
+aiofiles>=24.0.0
