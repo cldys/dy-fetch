@@ -29,6 +29,8 @@ python main.py
 
 启动后在页面输入框粘贴抖音链接，勾选需要的资源（视频 / 音频 / 封面 / JSON 数据），点击「开始下载」。
 
+默认保存到 `~/Downloads/DyFetch`。点击「选择文件夹」可浏览本机文件夹，也可输入绝对路径或 `~/` 开头的路径，点击「保存位置」后生效（不存在的目录会自动创建）。配置保存在项目根目录的 `settings.json`，刷新页面或重启服务后会恢复上次保存的位置；已有任务仍使用提交时的目录。
+
 支持的 URL 格式：
 - `https://www.douyin.com/video/7653450635035118882`
 - `https://www.douyin.com/jingxuan?modal_id=7653450635035118882`
@@ -41,6 +43,9 @@ python main.py
 | `GET` | `/api/task/{task_id}` | 查询任务状态与进度 |
 | `GET` | `/api/file/{task_id}/{filename}` | 下载已完成的文件 |
 | `GET` | `/api/history` | 查看最近任务列表 |
+| `GET` | `/api/settings` | 获取当前保存位置 |
+| `PUT` | `/api/settings` | 保存位置，JSON 字段为 `downloads_dir` |
+| `GET` | `/api/directories` | 浏览文件夹，可传入 `path` 参数 |
 
 #### POST /api/download
 
@@ -69,7 +74,7 @@ python main.py
 
 ## 下载文件
 
-下载完成后文件默认保存在 `~/hermes-one/downloads/douyin/<标题>/` 目录，可通过环境变量 `DOWNLOADS_DIR` 修改下载目录。
+下载完成后文件默认保存在 `~/Downloads/DyFetch/<标题>/` 目录，可在网页中选择其他保存位置。未保存过位置时，也可通过环境变量 `DOWNLOADS_DIR` 指定初始目录；网页保存的设置优先。
 
 | 文件 | 说明 |
 |------|------|
@@ -88,7 +93,7 @@ dy-dl/
 ├── requirements.txt     # Python 依赖
 ├── static/
 │   └── index.html       # Web 前端（单页，暗色主题）
-└── downloads/           # 下载目录 → ~/Downloads/douyin/
+└── settings.json        # 首次保存位置后生成，不纳入版本控制
 ```
 
 ## 配置
@@ -96,7 +101,7 @@ dy-dl/
 | 配置项 | 位置 | 默认值 |
 |--------|------|--------|
 | 服务端口 | `main.py` 底部 `uvicorn.run()` | `8800` |
-| 下载目录 | 环境变量 `DOWNLOADS_DIR` | `~/hermes-one/downloads/douyin/` |
+| 下载目录 | 网页「保存位置」；未保存时读取环境变量 `DOWNLOADS_DIR` | `~/Downloads/DyFetch/` |
 | 请求超时 | API 参数 `timeout` | `30` 秒 |
 
 ## 依赖

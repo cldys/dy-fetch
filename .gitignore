@@ -4,3 +4,5 @@ __pycache__/
 downloads/
 .DS_Store
 *.egg-info/
+settings.json
+.settings-*.tmp

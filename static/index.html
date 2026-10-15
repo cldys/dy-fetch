@@ -77,6 +77,7 @@
   }
   .input-group input {
     flex: 1;
+    min-width: 0;
     padding: 12px 16px;
     background: var(--bg);
     border: 1px solid var(--border);
@@ -124,6 +125,46 @@
     gap: 6px;
   }
   .btn-sm:hover { background: #3a3d4a; }
+
+  .save-location { margin-top: 20px; }
+  .save-location > label { display: block; margin-bottom: 8px; font-size: 14px; }
+  .location-hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .location-error { color: var(--error); }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  dialog {
+    margin: auto;
+    width: min(600px, calc(100% - 32px));
+    max-height: 85vh;
+    overflow: auto;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  dialog::backdrop { background: #0009; }
+  .folder-toolbar, .dialog-actions { display: flex; gap: 10px; margin-top: 14px; }
+  .dialog-actions { justify-content: flex-end; }
+  .folder-list { margin-top: 14px; height: 240px; overflow-y: auto; }
+  .folder-item {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    padding: 12px;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  .folder-item:hover { background: var(--border); }
+  @media (max-width: 520px) {
+    .input-group { flex-wrap: wrap; }
+    .input-group input { flex-basis: 100%; }
+    .btn { padding: 12px 16px; }
+  }
 
   /* checkboxes */
   .options {
@@ -239,6 +280,14 @@
       <label><input type="checkbox" id="optCover" checked /> 封面</label>
       <label><input type="checkbox" id="optJson" /> API 数据 (JSON)</label>
     </div>
+    <div class="save-location">
+      <label for="saveLocation">保存位置</label>
+      <div class="input-group">
+        <input id="saveLocation" type="text" readonly placeholder="正在读取保存位置…" />
+        <button class="btn btn-secondary" id="chooseLocationBtn" onclick="openFolderPicker()">选择文件夹</button>
+      </div>
+      <p class="location-hint" id="locationStatus" role="status">保存后，下次打开会继续使用此位置。</p>
+    </div>
   </div>
 
   <!-- task list -->
@@ -253,6 +302,29 @@
 
 </div>
 
+<dialog id="folderPicker" aria-labelledby="folderPickerTitle">
+  <h2 class="card-title" id="folderPickerTitle">选择保存位置</h2>
+  <form id="folderPathForm">
+    <label for="folderPath">文件夹路径</label>
+    <div class="input-group" style="margin-top:8px">
+      <input id="folderPath" type="text" autocomplete="off" spellcheck="false"
+             placeholder="例如 ~/Downloads/DyFetch" aria-describedby="folderHint" />
+      <button class="btn btn-secondary" type="submit">前往</button>
+    </div>
+  </form>
+  <div class="folder-toolbar">
+    <button class="btn btn-sm" id="parentFolderBtn" onclick="browseFolders(parentFolder)">上一级</button>
+    <button class="btn btn-sm" id="homeFolderBtn" onclick="browseFolders(homeFolder)">个人文件夹</button>
+  </div>
+  <div class="folder-list" id="folderList" aria-label="子文件夹"></div>
+  <p class="location-hint" id="folderHint">可输入新路径，保存时会自动创建文件夹。位置位于运行服务的本机。</p>
+  <p class="location-hint location-error" id="folderError" role="alert"></p>
+  <div class="dialog-actions">
+    <button class="btn btn-secondary" id="cancelLocationBtn" onclick="document.getElementById('folderPicker').close()">取消</button>
+    <button class="btn btn-primary" id="saveLocationBtn" onclick="saveLocation()">保存位置</button>
+  </div>
+</dialog>
+
 <!-- 隐藏的文件上传 form -->
 <form id="downloadForm" style="display:none">
   <input type="hidden" name="task_id" />
@@ -262,6 +334,118 @@
 <script>
   const tasks = {};
   let pollTimer = null;
+  let parentFolder = '';
+  let homeFolder = '';
+  let currentFolder = '';
+  let folderRequest = 0;
+  let savingLocation = false;
+
+  async function fetchJson(url, options) {
+    const res = await fetch(url, options);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '请求失败');
+    return data;
+  }
+
+  async function loadSettings() {
+    const status = document.getElementById('locationStatus');
+    try {
+      const data = await fetchJson('/api/settings');
+      document.getElementById('saveLocation').value = data.downloads_dir;
+      status.textContent = '保存后，下次打开会继续使用此位置。';
+      status.classList.remove('location-error');
+    } catch (e) {
+      status.textContent = '读取保存位置失败：' + e.message;
+      status.classList.add('location-error');
+    }
+  }
+
+  async function openFolderPicker() {
+    document.getElementById('folderPicker').showModal();
+    await browseFolders();
+  }
+
+  async function browseFolders(path) {
+    if (savingLocation) return;
+    const request = ++folderRequest;
+    const list = document.getElementById('folderList');
+    const error = document.getElementById('folderError');
+    const saveBtn = document.getElementById('saveLocationBtn');
+    const pathInput = document.getElementById('folderPath');
+    const parentBtn = document.getElementById('parentFolderBtn');
+    const homeBtn = document.getElementById('homeFolderBtn');
+    error.textContent = '';
+    list.textContent = '正在读取文件夹…';
+    saveBtn.disabled = true;
+    pathInput.disabled = parentBtn.disabled = homeBtn.disabled = true;
+    try {
+      const url = path === undefined ? '/api/directories' : '/api/directories?path=' + encodeURIComponent(path);
+      const data = await fetchJson(url);
+      if (request !== folderRequest) return;
+      pathInput.value = data.path;
+      currentFolder = data.path;
+      parentFolder = data.parent;
+      homeFolder = data.home;
+      list.replaceChildren();
+      for (const name of data.directories) {
+        const button = document.createElement('button');
+        button.className = 'folder-item';
+        button.textContent = '📁 ' + name;
+        button.addEventListener('click', () => browseFolders(data.path.replace(/\/$/, '') + '/' + name));
+        list.appendChild(button);
+      }
+      if (!data.directories.length) list.textContent = '此文件夹没有子文件夹，可直接保存到这里。';
+    } catch (e) {
+      if (request !== folderRequest) return;
+      list.replaceChildren();
+      error.textContent = e.message;
+    } finally {
+      if (request === folderRequest) {
+        saveBtn.disabled = pathInput.disabled = false;
+        parentBtn.disabled = !parentFolder || currentFolder === parentFolder;
+        homeBtn.disabled = !homeFolder;
+      }
+    }
+  }
+
+  async function saveLocation() {
+    if (savingLocation) return;
+    const error = document.getElementById('folderError');
+    const path = document.getElementById('folderPath').value.trim();
+    if (!path) { error.textContent = '请输入保存路径'; return; }
+    const saveBtn = document.getElementById('saveLocationBtn');
+    const cancelBtn = document.getElementById('cancelLocationBtn');
+    savingLocation = true;
+    saveBtn.disabled = cancelBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    error.textContent = '';
+    try {
+      const data = await fetchJson('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ downloads_dir: path }),
+      });
+      document.getElementById('saveLocation').value = data.downloads_dir;
+      const status = document.getElementById('locationStatus');
+      status.textContent = '位置已保存，新任务将使用此目录。';
+      status.classList.remove('location-error');
+      document.getElementById('folderPicker').close();
+    } catch (e) {
+      error.textContent = e.message;
+    } finally {
+      savingLocation = false;
+      saveBtn.disabled = cancelBtn.disabled = false;
+      saveBtn.textContent = '保存位置';
+    }
+  }
+
+  document.getElementById('folderPathForm').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!savingLocation) browseFolders(document.getElementById('folderPath').value.trim());
+  });
+  document.getElementById('folderPicker').addEventListener('cancel', e => {
+    if (savingLocation) e.preventDefault();
+  });
 
   function statusBadge(s) {
     const map = {
@@ -379,6 +563,7 @@
 
   // focus on load
   document.getElementById('urlInput').focus();
+  loadSettings();
   renderTasks();
 </script>
 </body>

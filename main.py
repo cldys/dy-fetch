@@ -7,12 +7,15 @@
 """
 
 import asyncio
+import json
+import logging
 import os
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -22,8 +25,29 @@ from core import download_all, safe_name
 # ── 配置 ──────────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).resolve().parent
-DOWNLOADS_DIR = Path(os.getenv("DOWNLOADS_DIR", Path.home() / "hermes-one" / "downloads" / "douyin"))
-DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+SETTINGS_FILE = BASE_DIR / "settings.json"
+DEFAULT_DOWNLOADS_DIR = Path.home() / "Downloads" / "DyFetch"
+
+
+def normalize_directory(value: str) -> Path:
+    path = Path(value.strip()).expanduser()
+    if not value.strip() or not path.is_absolute():
+        raise ValueError("请输入绝对路径，或以 ~/ 开头的路径")
+    return path.resolve()
+
+
+def load_downloads_dir() -> Path:
+    try:
+        settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        return normalize_directory(settings["downloads_dir"])
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError):
+        logging.warning("Unable to load download settings; using the default directory")
+    return normalize_directory(os.getenv("DOWNLOADS_DIR") or str(DEFAULT_DOWNLOADS_DIR))
+
+
+DOWNLOADS_DIR = load_downloads_dir()
 
 app = FastAPI(title="抖音下载器", version="1.0.0")
 
@@ -37,6 +61,7 @@ class Task:
     def __init__(self, task_id: str, url: str):
         self.id = task_id
         self.url = url
+        self.downloads_dir = DOWNLOADS_DIR
         self.status: str = "queued"
         self.progress: str = "等待中..."
         self.result: Optional[dict] = None
@@ -66,7 +91,7 @@ async def _run_download(task: Task, options: dict):
     try:
         result = await download_all(
             task.url,
-            DOWNLOADS_DIR,
+            task.downloads_dir,
             download_video=options.get("video", True),
             download_audio=options.get("audio", True),
             download_cover=options.get("cover", True),
@@ -100,6 +125,10 @@ class DownloadRequest(BaseModel):
     timeout: int = 30
 
 
+class SettingsRequest(BaseModel):
+    downloads_dir: str
+
+
 class TaskResponse(BaseModel):
     id: str
     url: str
@@ -117,6 +146,59 @@ async def index():
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
+
+@app.get("/api/settings")
+async def api_settings():
+    return {"downloads_dir": str(DOWNLOADS_DIR)}
+
+
+@app.put("/api/settings")
+async def api_save_settings(req: SettingsRequest):
+    global DOWNLOADS_DIR
+    temporary_path = None
+    try:
+        directory = normalize_directory(req.downloads_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        # Check actual write access before persisting the new location.
+        with tempfile.TemporaryFile(dir=directory):
+            pass
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=BASE_DIR,
+                                         prefix=".settings-", suffix=".tmp", delete=False) as f:
+            temporary_path = Path(f.name)
+            json.dump({"downloads_dir": str(directory)}, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        temporary_path.replace(SETTINGS_FILE)
+    except (OSError, ValueError, RuntimeError) as e:
+        raise HTTPException(400, f"无法保存目录：{e}") from e
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+    DOWNLOADS_DIR = directory
+    return {"downloads_dir": str(DOWNLOADS_DIR)}
+
+
+@app.get("/api/directories")
+async def api_directories(path: Optional[str] = None):
+    """浏览本机文件夹，供保存位置选择器使用。"""
+    try:
+        directory = normalize_directory(path) if path is not None else DOWNLOADS_DIR
+        if path is None:
+            while not directory.exists() and directory != directory.parent:
+                directory = directory.parent
+        children = sorted(
+            (child.name for child in directory.iterdir()
+             if not child.name.startswith(".") and child.is_dir()),
+            key=str.casefold,
+        )
+    except (OSError, ValueError, RuntimeError) as e:
+        raise HTTPException(400, f"无法打开目录：{e}") from e
+    return {
+        "path": str(directory),
+        "parent": str(directory.parent),
+        "home": str(Path.home()),
+        "directories": children,
+    }
+
 
 @app.post("/api/download", response_model=TaskResponse)
 async def api_download(req: DownloadRequest):
@@ -156,11 +238,11 @@ async def api_file(task_id: str, filename: str):
     if not task or not task.result:
         raise HTTPException(404, "任务不存在")
     meta = task.result.get("meta") or {}
-    folder_name = safe_name(meta.get("desc", "") or task_id)
-    file_path = DOWNLOADS_DIR / folder_name / filename
+    folder_name = safe_name(meta.get("desc", "") or meta.get("aweme_id", "") or task_id)
+    file_path = task.downloads_dir / folder_name / filename
     if not file_path.exists():
         # try finding the file by crawling the directory
-        for f in (DOWNLOADS_DIR / folder_name).iterdir() if (DOWNLOADS_DIR / folder_name).exists() else []:
+        for f in (task.downloads_dir / folder_name).iterdir() if (task.downloads_dir / folder_name).exists() else []:
             if f.name == filename:
                 file_path = f
                 break
