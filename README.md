@@ -69,7 +69,7 @@ python main.py
 
 ## 下载文件
 
-下载完成后文件保存在 `~/Downloads/douyin/<标题>/` 目录：
+下载完成后文件默认保存在 `~/hermes-one/downloads/douyin/<标题>/` 目录，可通过环境变量 `DOWNLOADS_DIR` 修改下载目录。
 
 | 文件 | 说明 |
 |------|------|
@@ -96,7 +96,7 @@ dy-dl/
 | 配置项 | 位置 | 默认值 |
 |--------|------|--------|
 | 服务端口 | `main.py` 底部 `uvicorn.run()` | `8800` |
-| 下载目录 | `main.py` `DOWNLOADS_DIR` | `~/Downloads/douyin/` |
+| 下载目录 | 环境变量 `DOWNLOADS_DIR` | `~/hermes-one/downloads/douyin/` |
 | 请求超时 | API 参数 `timeout` | `30` 秒 |
 
 ## 依赖

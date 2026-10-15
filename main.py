@@ -7,6 +7,7 @@
 """
 
 import asyncio
+import os
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -21,7 +22,7 @@ from core import download_all, safe_name
 # ── 配置 ──────────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).resolve().parent
-DOWNLOADS_DIR = Path.home() / "hermes-one" / "downloads" / "douyin"
+DOWNLOADS_DIR = Path(os.getenv("DOWNLOADS_DIR", Path.home() / "hermes-one" / "downloads" / "douyin"))
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="抖音下载器", version="1.0.0")
