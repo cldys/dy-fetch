@@ -75,7 +75,7 @@
     display: flex;
     gap: 10px;
   }
-  .input-group input {
+  .input-group input, .input-group textarea {
     flex: 1;
     min-width: 0;
     padding: 12px 16px;
@@ -87,12 +87,14 @@
     outline: none;
     transition: border-color .2s;
   }
-  .input-group input:focus {
+  .input-group input:focus, .input-group textarea:focus {
     border-color: var(--accent);
   }
-  .input-group input::placeholder {
+  .input-group input::placeholder, .input-group textarea::placeholder {
     color: var(--muted);
   }
+  .download-input { align-items: flex-start; }
+  .download-input textarea { font-family: inherit; resize: vertical; min-height: 110px; }
 
   /* buttons */
   .btn {
@@ -162,7 +164,7 @@
   .folder-item:hover { background: var(--border); }
   @media (max-width: 520px) {
     .input-group { flex-wrap: wrap; }
-    .input-group input { flex-basis: 100%; }
+    .input-group input, .input-group textarea { flex-basis: 100%; }
     .btn { padding: 12px 16px; }
   }
 
@@ -268,16 +270,17 @@
   <!-- input card -->
   <div class="card">
     <div class="card-title">📥 新建下载</div>
-    <div class="input-group">
-      <input id="urlInput" type="text"
-             placeholder="粘贴抖音视频链接，例如 https://www.douyin.com/video/..."
-             autocomplete="off" />
+    <div class="input-group download-input">
+      <textarea id="urlInput" rows="4" aria-label="抖音视频链接，每行一个"
+                placeholder="粘贴抖音视频链接，每行一个，支持批量下载"
+                aria-describedby="batchHint" autocomplete="off" spellcheck="false"></textarea>
       <button class="btn btn-primary" id="submitBtn" onclick="submitDownload()">开始下载</button>
     </div>
+    <p class="location-hint" id="batchHint">每行一个链接，按顺序下载，失败后自动继续下一条。Ctrl / ⌘ + Enter 提交。</p>
     <div class="options">
-      <label><input type="checkbox" id="optVideo" checked /> 视频</label>
+      <label><input type="checkbox" id="optVideo" /> 视频</label>
       <label><input type="checkbox" id="optAudio" checked /> 音频</label>
-      <label><input type="checkbox" id="optCover" checked /> 封面</label>
+      <label><input type="checkbox" id="optCover" /> 封面</label>
       <label><input type="checkbox" id="optJson" /> API 数据 (JSON)</label>
     </div>
     <div class="save-location">
@@ -476,9 +479,9 @@
           }
         }
       }
-      let progressHtml = t.progress;
+      let progressHtml = escHtml(t.progress || '');
       if (t.status === 'fetching') {
-        progressHtml = `<span class="spinner"></span>${t.progress}`;
+        progressHtml = `<span class="spinner"></span>${progressHtml}`;
       }
       return `<div class="task">
         <div class="task-info">
@@ -499,27 +502,30 @@
 
   async function submitDownload() {
     const input = document.getElementById('urlInput');
-    const url = input.value.trim();
-    if (!url) return alert('请输入抖音视频链接');
+    const urls = input.value.split(/\r?\n/).map(url => url.trim()).filter(Boolean);
+    if (!urls.length) return alert('请输入抖音视频链接，每行一个');
 
     const btn = document.getElementById('submitBtn');
+    if (btn.disabled) return;
     btn.disabled = true;
     btn.textContent = '提交中...';
 
     try {
-      const res = await fetch('/api/download', {
+      const data = await fetchJson('/api/download/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: url,
+          urls: urls,
           video: document.getElementById('optVideo').checked,
           audio: document.getElementById('optAudio').checked,
           cover: document.getElementById('optCover').checked,
           save_json: document.getElementById('optJson').checked,
         })
       });
-      const data = await res.json();
-      tasks[data.id] = { ...data, _ts: Date.now() };
+      const timestamp = Date.now();
+      data.forEach((task, index) => {
+        tasks[task.id] = { ...task, _ts: timestamp - index / data.length };
+      });
       input.value = '';
       renderTasks();
       startPolling();
@@ -537,8 +543,7 @@
 
     for (const t of active) {
       try {
-        const res = await fetch(`/api/task/${t.id}`);
-        const data = await res.json();
+        const data = await fetchJson(`/api/task/${t.id}`);
         tasks[t.id] = { ...data, _ts: tasks[t.id]?._ts || Date.now() };
       } catch(e) { /* ignore */ }
     }
@@ -556,9 +561,12 @@
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
 
-  // enter to submit
+  // Enter inserts a new line; Ctrl/Cmd + Enter submits the batch.
   document.getElementById('urlInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') submitDownload();
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      submitDownload();
+    }
   });
 
   // focus on load

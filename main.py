@@ -92,9 +92,9 @@ async def _run_download(task: Task, options: dict):
         result = await download_all(
             task.url,
             task.downloads_dir,
-            download_video=options.get("video", True),
+            download_video=options.get("video", False),
             download_audio=options.get("audio", True),
-            download_cover=options.get("cover", True),
+            download_cover=options.get("cover", False),
             save_json=options.get("save_json", False),
             timeout=options.get("timeout", 30),
             progress_callback=_progress_callback(task),
@@ -114,15 +114,27 @@ async def _run_download(task: Task, options: dict):
         task.progress = str(e)
 
 
+async def _run_batch(batch: list[Task], options: dict):
+    for task in batch:
+        await _run_download(task, options)
+
+
 # ── API 模型 ──────────────────────────────────────────────────────────────────
 
-class DownloadRequest(BaseModel):
-    url: str
-    video: bool = True
+class DownloadOptions(BaseModel):
+    video: bool = False
     audio: bool = True
-    cover: bool = True
+    cover: bool = False
     save_json: bool = False
     timeout: int = 30
+
+
+class DownloadRequest(DownloadOptions):
+    url: str
+
+
+class BatchDownloadRequest(DownloadOptions):
+    urls: list[str]
 
 
 class SettingsRequest(BaseModel):
@@ -217,6 +229,22 @@ async def api_download(req: DownloadRequest):
 
     asyncio.create_task(_run_download(task, options))
     return TaskResponse(id=task.id, url=task.url, status=task.status, progress=task.progress)
+
+
+@app.post("/api/download/batch", response_model=list[TaskResponse])
+async def api_download_batch(req: BatchDownloadRequest):
+    """按顺序下载多个链接，每个任务独立记录结果。"""
+    urls = [url.strip() for url in req.urls if url.strip()]
+    if not urls:
+        raise HTTPException(400, "请至少输入一个抖音视频链接")
+    batch = [Task(uuid.uuid4().hex[:8], url) for url in urls]
+    for task in batch:
+        tasks[task.id] = task
+    asyncio.create_task(_run_batch(batch, req.model_dump(exclude={"urls"})))
+    return [
+        TaskResponse(id=task.id, url=task.url, status=task.status, progress=task.progress)
+        for task in batch
+    ]
 
 
 @app.get("/api/task/{task_id}", response_model=TaskResponse)

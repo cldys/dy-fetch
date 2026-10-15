@@ -27,7 +27,9 @@ python main.py
 
 ### Web 界面
 
-启动后在页面输入框粘贴抖音链接，勾选需要的资源（视频 / 音频 / 封面 / JSON 数据），点击「开始下载」。
+启动后在页面输入框粘贴一个或多个抖音链接，**每行一个**，点击「开始下载」。链接按粘贴顺序逐个处理，每条单独显示状态，前面的下载失败不影响后续任务。空行会自动忽略；Enter 换行，Ctrl/Cmd + Enter 提交。
+
+默认仅勾选「音频」，可按需勾选视频、封面或 JSON 数据。
 
 默认保存到 `~/Downloads/DyFetch`。点击「选择文件夹」可浏览本机文件夹，也可输入绝对路径或 `~/` 开头的路径，点击「保存位置」后生效（不存在的目录会自动创建）。配置保存在项目根目录的 `settings.json`，刷新页面或重启服务后会恢复上次保存的位置；已有任务仍使用提交时的目录。
 
@@ -40,6 +42,7 @@ python main.py
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `POST` | `/api/download` | 提交下载任务 |
+| `POST` | `/api/download/batch` | 批量提交下载任务，按顺序执行 |
 | `GET` | `/api/task/{task_id}` | 查询任务状态与进度 |
 | `GET` | `/api/file/{task_id}/{filename}` | 下载已完成的文件 |
 | `GET` | `/api/history` | 查看最近任务列表 |
@@ -52,9 +55,9 @@ python main.py
 ```json
 {
   "url": "https://www.douyin.com/video/7653450635035118882",
-  "video": true,
+  "video": false,
   "audio": true,
-  "cover": true,
+  "cover": false,
   "save_json": false,
   "timeout": 30
 }
@@ -70,7 +73,21 @@ python main.py
 }
 ```
 
-轮询 `GET /api/task/a1b2c3d4`，`status` 变为 `done` 后，可调用 `/api/file/{task_id}/video.mp4` 等接口下载。
+轮询 `GET /api/task/a1b2c3d4`，`status` 变为 `done` 后，可调用 `/api/file/{task_id}/audio.m4a` 等接口下载。
+
+#### POST /api/download/batch
+
+```json
+{
+  "urls": [
+    "https://www.douyin.com/video/7653450635035118882",
+    "https://www.douyin.com/video/7653450635035118883"
+  ],
+  "audio": true
+}
+```
+
+返回任务数组，每个元素与单条提交的返回结构一致，可分别轮询状态。单条和批量接口均默认仅下载音频，其他资源需显式设为 `true`。
 
 ## 下载文件
 
@@ -114,7 +131,7 @@ dy-dl/
 ## 后续计划
 
 - [ ] SQLite 持久化任务历史
-- [ ] 批量 URL 导入
+- [x] 批量 URL 导入
 - [ ] 音频格式转换（mp3）
 - [ ] 用户主页批量下载
 - [ ] Cookie 登录态支持（私密视频）
